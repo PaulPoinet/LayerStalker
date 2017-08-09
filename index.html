@@ -1,0 +1,279 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Layer Stalker</title>
+    <script src="js/d3.js"></script>
+    <link rel="stylesheet" type="text/css" href="css/style.css">
+</head>
+<body bgcolor="#EDEDED">
+    <script>
+        var init = function () {
+            var data = [];
+        }
+        init();
+        //sourced from https://bl.ocks.org/mbostock/4339083
+
+        function updateLayers(json) {
+            data = JSON.parse(json);
+            if (document.getElementById("dwg"))
+                d3.select("svg").remove();
+            //create
+            // *********** Convert flat data into a nice tree ***************
+            // create a name: node map
+            var dataMap = data.reduce(function (map, node) {
+                map[node.id] = node;
+                return map;
+            }, {});
+            // create the tree array
+            var treeData = [];
+            data.forEach(function (node) {
+                // add to parent
+                var parent = dataMap[node.parent];
+                if (parent) {
+                    // create child array if it doesn't exist
+                    (parent.children || (parent.children = []))
+                        // add node to child array
+                        .push(node);
+                } else {
+                    // parent is null or missing
+                    treeData.push(node);
+                }
+            });
+            // ************** Generate the tree diagram	 *****************
+            var diameter = 1200;
+
+            var margin = { top: 20, right: 120, bottom: 20, left: 120 },
+                width = diameter,
+                height = diameter;
+
+            var i = 0,
+                duration = 350,
+                root;
+
+            var tree = d3.layout.tree()
+                .size([360, diameter / 2 - 80])
+                .separation(function (a, b) { return (a.parent == b.parent ? 1 : 2) / a.depth; });
+
+            var diagonal = d3.svg.diagonal.radial()
+                .projection(function (d) { return [d.y, d.x / 180 * Math.PI]; });
+
+            var svg = d3.select("body").append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .attr("id", "dwg")
+                .append("g")
+                //.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+                .attr("transform", "translate(" + diameter / 2 + "," + diameter / 2 + ")");
+
+            // Add tooltip div
+            var div = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 1e-6);
+
+            root = treeData[0];
+            root.x0 = height / 2;
+            root.y0 = 0;
+
+
+
+            function collapse(d) {
+                if (d.children && d.IsExp == false) { // if not expanded and contains children >>> collapse
+                    d._children = d.children;
+                    d._children.forEach(collapse);
+                    d.children = null;
+
+                } else if (d.children && d.IsExp == true) { // if contains children and expanded
+                    d._children = d.children;
+                    d._children.forEach(collapse);
+                }
+
+            }
+
+            root.children.forEach(collapse);
+            update(root);
+            
+
+            //d3.select(self.frameElement).style("height", "800px");
+
+            function update(source) {
+
+                // Compute the new tree layout.
+                var nodes = tree.nodes(root),
+                    links = tree.links(nodes);
+
+                // Normalize for fixed-depth.
+                nodes.forEach(function (d) { d.y = d.depth * 80; });
+
+                // Update the nodes…
+                var node = svg.selectAll("g.node")
+                    .data(nodes, function (d) { return d.id || (d.id = ++i); });
+
+                // Enter any new nodes at the parent's previous position.
+                var nodeEnter = node.enter().append("g")
+                    .attr("class", "node")
+                    .attr("transform", function(d) { return "rotate(" + (d.x - 90) + ")translate(" + d.y + ")"; })
+                    .on("click", click)
+                    .on("mouseover", mouseover)
+                    .on("mousemove", function (d) { mousemove(d); })
+                    .on("mouseout", mouseout)
+                    //.on("keydown", function (d) { displayChildren(d); });
+
+                nodeEnter.append("circle")
+                    //.attr("r", 1e-6)
+                    .style("stroke", function (d) { return d.LayerColor })
+                    .style("stroke-dasharray", function (d) { if (d.IsVisible == false) { return ("2,2") } else { } }) // make the stroke dashed
+                    .style("stroke-opacity", function (d) { if (d.IsLocked == true) { return .35 } else { } }) // set the stroke opacity
+                    .style("stroke-width", function (d) { if (d.name === d.CurrLayer) { return 4 } })
+
+
+
+                nodeEnter.append("text")
+                    .attr("x", 10)
+                    .attr("dy", ".31em")
+                    .attr("text-anchor", "start")
+                    .attr("transform", function(d) { return d.x < 180 ? "translate(0)" : "rotate(180)translate(-" + (d.name.length * 8.5)  + ")"; })
+                    .text(function (d) { return d.name; }) // this could be much more improved. there are some bugs in the display of the text.
+                    .style("fill-opacity", 1e-6)
+
+                //Transition nodes to their new position.
+                
+                var nodeUpdate = node.transition()
+                    .duration(duration)
+                    .attr("transform", function (d) { return "rotate(" + (d.x - 90) + ")translate(" + d.y + ")"; })
+                    .style("stroke-dasharray", function (d) { if (d.IsVisible == false) { return ("2,2") } else { } }) // make the stroke dashed
+                    .style("stroke-opacity", function (d) { if (d.IsLocked == true) { return .35 } else { } }) // set the stroke opacity
+                    .attr("transform", function (d) { return "rotate(" + (d.x - 90) + ")translate(" + d.y + ")"; });
+
+                nodeUpdate.select("circle")
+                    .attr("r", 4.5)
+                    //.attr("r", function (d) { if (d.Size < 10 || d.Size > 0) { return d.Size } else if (d.Size <= 1) { return 1 } else if (d.Size >= 10) { return 10 } })
+                    .style("stroke-dasharray", function (d) { if (d.IsVisible == false) { return ("2,2") } else { } }) // make the stroke dashed
+                    .style("stroke-opacity", function (d) { if (d.IsLocked == true) { return .35 } else { } }) // set the stroke opacity
+                    .style("fill", function (d) { if (d._children && d.IsExp == false) { return "Plum" } else { return "#fff" } }) // this could be improved...
+
+                nodeUpdate.select("text")
+                    .style("fill-opacity", 1)
+                    .attr("transform", function (d) { return d.x < 180 ? "translate(0)" : "translate(-" + (d.name.length + 20) + ")"; });
+
+                // TODO: appropriate transform
+                var nodeExit = node.exit().transition()
+                    .duration(duration)
+                    .attr("transform", function(d) { return "diagonal(" + source.y + "," + source.x + ")"; })
+                    .remove();
+
+                nodeExit.select("circle")
+                    .attr("r", 1e-6);
+
+                nodeExit.select("text")
+                    .style("fill-opacity", 1e-6);
+
+                // Update the links…
+                var link = svg.selectAll("path.link")
+                    .data(links, function (d) { return d.target.id; })
+                    .style("stroke-dasharray", function (d) { if (d.target.IsVisible == false) { return ("3,2") } else { } }) // make the stroke dashed
+                    .style("stroke-opacity", function (d) { if (d.target.IsLocked == true) { return .35 } else { } }) // set the stroke opacity
+                    .style("stroke-width", function (d) {
+                        if (d.target.Predecessors.indexOf(d.target.name) > -1) { return 4 } else if (d.target.IsLocked == true) { return .6 } else if (d.target.Predecessors.indexOf(d.target.name) > -1) { return 4 }
+                    })
+
+                
+
+
+                // Enter any new links at the parent's previous position.
+                link.enter().insert("path", "g")
+                    .attr("class", "link")
+                    .attr("d", function (d) {
+                        var o = { x: source.x0, y: source.y0 };
+                        return diagonal({ source: o, target: o })
+                    })
+                    .style("stroke-dasharray", function (d) { if (d.target.IsVisible == false) { return ("3,2") } else { } }) // make the stroke dashed if the layer is hidden
+                    .style("stroke-opacity", function (d) { if (d.target.IsLocked == true) { return .35 } else { } }) // set the stroke opacity
+                    .style("stroke-width", function (d) {
+                        if (d.target.Predecessors.indexOf(d.target.name) > -1) { return 4 } else if (d.target.IsLocked == true) { return .6 } else if (d.target.Predecessors.indexOf(d.target.name) > -1) { return 4 }
+                    })
+
+                // Transition links to their new position.
+                link.transition()
+                    .duration(duration)
+                    .style("stroke-dasharray", function (d) { if (d.target.IsVisible == false) { return ("3,2") } else { } }) // make the stroke dashed
+                    .style("stroke-opacity", function (d) { if (d.target.IsLocked == true) { return .35 } else { } }) // set the stroke opacity
+                    .style("stroke-width", function (d) {
+                        if (d.target.Predecessors.indexOf(d.target.name) > -1) { return 4 } else if (d.target.IsLocked == true) { return .6 } else if (d.target.Predecessors.indexOf(d.target.name) > -1) { return 4 }
+                    })
+                    .attr("d", diagonal)
+
+                    
+                // Transition exiting nodes to the parent's new position.
+                link.exit().transition()
+                    .duration(duration)
+                    .attr("d", function (d) {
+                        var o = { x: source.x, y: source.y };
+                        return diagonal({ source: o, target: o });
+                    })
+                    .remove();
+
+                // Stash the old positions for transition.
+                nodes.forEach(function (d) {
+                    d.x0 = d.x;
+                    d.y0 = d.y;
+                });
+            }
+            // Toggle children on click.
+            function click(d) {
+                if (d.children) {
+                    d._children = d.children;
+                    d.children = null;
+                    d.IsExp === true; // this does not work. I wanted to communicate with the Rhino LayerTable so if in D3 the layer is expanded, that would influence also the behaviour of the table.
+                } else {
+                    d.children = d._children;
+                    d._children = null;
+                    d.IsExp === false; // same here but opposite
+                    
+                }
+                update(d);
+            }
+
+            // Hover on nodes!
+            function mouseover() {
+                div.transition()
+                .duration(300)
+                .style("opacity", 1);
+            }
+            function mousemove(d) {
+                div
+                .text(d.name)
+                .style("left", (d3.event.pageX) + "px")
+                .style("top", (d3.event.pageY) + "px");
+            }
+            function mouseout() {
+                div.transition()
+                .duration(300)
+                .style("opacity", 1e-6);
+            }
+
+            function displayChildren(d) {
+                //d.Objects;
+            }
+
+            return "done";
+        }
+        function click(d) {
+            console.log('layerStalker://' + d.name);
+            window.location.replace('layerStalker://click/' + btoa(d.name));
+        }
+        function testUpdate() {
+            var layersTest = [
+                { id: "1", parent: "0", name: "l1" },
+                { id: "0", parent: "", name: "model" },
+                { id: "3", parent: "1", name: "l3" },
+                { id: "4", parent: "1", name: "l4" },
+                { id: "2", parent: "0", name: "l2" },
+                { id: "5", parent: "2", name: "l5" }];
+            var sLayers = JSON.stringify(layersTest);
+            updateLayers(sLayers);
+        }
+
+    </script>
+</body>
+</html>
