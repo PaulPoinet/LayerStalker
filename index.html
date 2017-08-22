@@ -1,0 +1,448 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        #footer {
+          font: 12pt helvetica neue;
+          color: #666;
+        }
+    </style>
+    <title>Layer Stalker</title>
+    <script src="js/d3.js"></script>
+    <script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="css/style.css"> 
+   
+    
+</head>
+
+<body bgcolor="#EDEDED">
+
+    <div id="footer">
+        <label for="search">search tag: </label>
+        <input type="text" id="searchbox" onkeyup="update(this.value)">
+    </div>
+
+    <script> 
+        var init = function () {
+            var data = [];
+            var dataObjs = [];
+            
+        }
+        init();
+        //sourced from https://bl.ocks.org/mbostock/4339083
+
+
+
+
+
+
+
+        function updateLayers(json) {
+
+
+            data = JSON.parse(json);
+            if (document.getElementById("dwg"))
+                d3.select("svg").remove();
+
+            //create
+            // *********** Convert flat data into a nice tree ***************
+            // create a name: node map
+            var dataMap = data.reduce(function (map, node) {
+                map[node.id] = node;
+                return map;
+            }, {});
+            // create the tree array
+            var treeData = [];
+            data.forEach(function (node) {
+                // add to parent
+                var parent = dataMap[node.parent];
+                if (parent) {
+                    // create child array if it doesn't exist
+                    (parent.children || (parent.children = []))
+                        // add node to child array
+                        .push(node);
+                } else {
+                    // parent is null or missing
+                    treeData.push(node);
+                }
+            });
+            // ************** Generate the tree diagram	 *****************
+
+
+            //tag = document.getElementById("search").value;
+
+            var menu = [
+	            {
+	                title: 'Select Objects',
+	                action: function (elm, d, i) {
+	                    selObjs(d);
+	                }
+	            },
+                {
+                    title: 'Set as Current',
+                    action: function (elm, d, i) {
+                        setCurrent(d)
+                    }
+                },
+                {
+                    title: 'Hide Unselected Objects',
+                    action: function (elm, d, i) {
+                        hideUnselected(d)
+                    }
+                }
+            ];
+
+            var diameter = 1200;
+
+            var margin = { top: 20, right: 120, bottom: 20, left: 120 },
+                width = diameter,
+                height = diameter;
+
+            var i = 0,
+                duration = 350,
+                root;
+
+            var tree = d3.layout.tree()
+                .size([360, diameter / 2 - 80])
+                .separation(function (a, b) { return (a.parent == b.parent ? 1 : 2) / a.depth; });
+
+            var diagonal = d3.svg.diagonal.radial()
+                .projection(function (d) { return [d.y, d.x / 180 * Math.PI]; });
+
+            var svg = d3.select("body").append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .attr("id", "dwg")
+                .append("g")
+                //.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+                .attr("transform", "translate(" + diameter / 2 + "," + diameter / 2 + ")");
+
+            // Add tooltip div
+            var div = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 1e-6)
+                //.style("background", function (d) { return d.LayerColor; })
+
+
+
+
+
+            root = treeData[0];
+            root.x0 = height / 2;
+            root.y0 = 0;
+
+
+
+            function collapse(d) {
+                if (d.children && d.IsExp == false) { // if not expanded and contains children >>> collapse
+                    d._children = d.children;
+                    d._children.forEach(collapse);
+                    d.children = null;
+
+                } else if (d.children && d.IsExp == true) { // if contains children and expanded
+                    d._children = d.children;
+                    d._children.forEach(collapse);
+                }
+
+            }
+
+            root.children.forEach(collapse);
+            update(root);
+
+            function update(source) {
+
+
+
+
+                // Compute the new tree layout.
+                var nodes = tree.nodes(root),
+                    links = tree.links(nodes);
+
+                // Normalize for fixed-depth.
+                nodes.forEach(function (d) { d.y = d.depth * 100; });
+
+                // Update the nodes…
+                var node = svg.selectAll("g.node")
+                    .data(nodes, function (d) { return d.id || (d.id = ++i); });
+
+                // Enter any new nodes at the parent's previous position.
+                var nodeEnter = node.enter().append("g")
+                    .attr("class", "node")
+                    //.attr("transform", function(d) { return "rotate(" + (d.x - 90) + ")translate(" + d.y + ")"; })
+
+
+                    .on("mouseover", function (d) { mouseover(d); })
+                    .on("mousemove", function (d) { mousemove(d); })
+                    .on("mouseout", mouseout)
+                    .on("click", click)
+                    .on("contextmenu", contextMenu(menu))
+
+                nodeEnter.append("circle")
+                    //.attr("r", 1e-6)
+                    .style("stroke", function (d) { return d.LayerColor })
+                    .style("stroke-dasharray", function (d) { if (d.IsVisible == false) { return ("2,2") } else { } }) // make the stroke dashed
+                    .style("stroke-opacity", function (d) { if (d.IsLocked == true) { return .35 } else { } }) // set the stroke opacity
+                    .style("stroke-width", function (d) { if (d.name === d.CurrLayer) { return 4 } })
+
+
+
+                nodeEnter.append("text")
+                    .text(function (d) { return d.name; })
+                    //.style("color", function (d) { if (d.name.toLowerCase().indexOf(inputVal.toLowerCase()) != -1) { return "Plum" } else { return "Black" } })
+                    //.style("font-weight", function (d) { if (d.name.toLowerCase().indexOf(document.getElementById("search").value.toLowerCase()) != -1) { return "bold" } else { return "normal" } })
+                    
+                    .attr("dy", ".31em")
+                    .attr("x", function (d) { return d.x < 180 === !d.children ? 10 : -10; })
+                    .style("font-weight", function (d) { return d.children || d._children ? "bold" : "normal" })
+
+                    
+                
+                
+                    .attr("text-anchor", function (d) { return d.x < 180 === !d.children ? "start" : "end"; })
+
+                    .attr("transform", function (d) { return d.x < 180 ? "translate(0)" : "rotate(180)"; })
+                    
+                    .style("fill-opacity", 1e-6)
+
+                //Transition nodes to their new position.
+                
+                var nodeUpdate = node.transition()
+                    .duration(duration)
+
+                    .attr("transform", function (d) { return "rotate(" + (d.x - 90) + ")translate(" + d.y + ")"; })
+                    .style("stroke-dasharray", function (d) { if (d.IsVisible == false) { return ("2,2") } else { } }) // make the stroke dashed
+                    .style("stroke-opacity", function (d) { if (d.IsLocked == true) { return .35 } else { } }) // set the stroke opacity
+                    
+
+                nodeUpdate.select("circle")
+                    .attr("r", 4.5)
+                    .style("stroke-dasharray", function (d) { if (d.IsVisible == false) { return ("2,2") } else { } }) // make the stroke dashed
+                    .style("stroke-opacity", function (d) { if (d.IsLocked == true) { return .35 } else { } }) // set the stroke opacity
+                    .style("fill", function (d) { if (d._children && d.IsExp == false) { return "Plum" } else { return "#fff" } }) // this could be improved...
+                
+                nodeUpdate.select("text")
+                    .attr("dy", ".31em")
+                    .style("fill-opacity", 1)
+                    .style("font-weight", function (d) { return d.children || d._children ? "bold" : "normal" })
+                    //.style("font-weight", function (d) { if (d.name.toLowerCase().indexOf(document.getElementById("search").value.toLowerCase()) != -1) { return "bold" } else { return "normal" } })
+                    //.style("font-color", function (d) { if (d.name.toLowerCase().indexOf(inputVal.toLowerCase()) != -1) { return "Plum" } else { return "Black" } })
+                    .attr("x", function (d) { return d.x < 180 === !d.children ? 10 : -10; })
+                    .attr("text-anchor", function (d) { return d.x < 180 === !d.children ? "start" : "end"; })
+                    .attr("transform", function (d) { return d.x < 180 ? "translate(0)" : "rotate(180)"; })
+
+                // TODO: appropriate transform
+                var nodeExit = node.exit().transition()
+                    .duration(duration)
+                    //.attr("transform", function(d) { return "diagonal(" + source.y + "," + source.x + ")"; })
+                    .remove();
+
+                nodeExit.select("circle")
+                    .attr("r", 1e-6);
+
+                nodeExit.select("text")
+                    .style("fill-opacity", 1e-6);
+
+                // Update the links…
+                var link = svg.selectAll("path.link")
+                    .data(links, function (d) { return d.target.id; })
+                    .style("stroke-dasharray", function (d) { if (d.target.IsVisible == false) { return ("3,2") } else { } }) // make the stroke dashed
+                    .style("stroke-opacity", function (d) { if (d.target.IsLocked == true) { return .35 } else { } }) // set the stroke opacity
+                    .style("stroke-width", function (d) {
+                        if (d.target.Predecessors.indexOf(d.target.name) > -1) { return 4 } else if (d.target.IsLocked == true) { return .6 } else if (d.target.Predecessors.indexOf(d.target.name) > -1) { return 4 }
+                    })
+
+                // Enter any new links at the parent's previous position.
+                link.enter().insert("path", "g")
+                    .attr("class", "link")
+                    .attr("d", function (d) {
+                        var o = { x: source.x0, y: source.y0 };
+                        return diagonal({ source: o, target: o })
+                    })
+                    .style("stroke-dasharray", function (d) { if (d.target.IsVisible == false) { return ("3,2") } else { } }) // make the stroke dashed if the layer is hidden
+                    .style("stroke-opacity", function (d) { if (d.target.IsLocked == true) { return .35 } else { } }) // set the stroke opacity
+                    .style("stroke-width", function (d) {
+                        if (d.target.Predecessors.indexOf(d.target.name) > -1) { return 4 } else if (d.target.IsLocked == true) { return .6 } else if (d.target.Predecessors.indexOf(d.target.name) > -1) { return 4 }
+                    })
+
+                // Transition links to their new position.
+                link.transition()
+                    .duration(duration)
+                    .style("stroke-dasharray", function (d) { if (d.target.IsVisible == false) { return ("3,2") } else { } }) // make the stroke dashed
+                    .style("stroke-opacity", function (d) { if (d.target.IsLocked == true) { return .35 } else { } }) // set the stroke opacity
+                    .style("stroke-width", function (d) {
+
+                        if (d.target.Predecessors.indexOf(d.target.name) > -1) { return 4 } else if (d.target.IsLocked == true) { return .6 } else if (d.target.Predecessors.indexOf(d.target.name) > -1) { return 4 }
+                    })
+                    .attr("d", diagonal)
+
+                    
+                // Transition exiting nodes to the parent's new position.
+                link.exit().transition()
+                    .duration(duration)
+                    .attr("d", function (d) {
+                        var o = { x: source.x, y: source.y };
+                        return diagonal({ source: o, target: o });
+                    })
+                    .remove();
+
+                // Stash the old positions for transition.
+                nodes.forEach(function (d) {
+                    d.x0 = d.x;
+                    d.y0 = d.y;
+                });
+            }
+            // Toggle children on click.
+            function click(d) {
+                if (d.children) {
+                    d._children = d.children;
+                    d.children = null;
+                    d.IsExp === true; // this does not work. I wanted to communicate with the Rhino LayerTable so if in D3 the layer is expanded, that would influence also the behaviour of the table.
+                } else {
+                    d.children = d._children;
+                    d._children = null;
+                    d.IsExp === false; // same here but opposite
+                    
+                }
+                update(d);
+            }
+
+            // Hover on nodes!
+            function mouseover(d) {
+                div.transition()
+                .duration(300)
+                .style("opacity", 1.0)
+                .style("background", d.LayerColor)
+            }
+            function mousemove(d) {
+                div
+                .text(d.name)
+                .style("color", invertColor(d.LayerColor))
+                .style("left", (d3.event.pageX + 10) + "px")
+                .style("top", (d3.event.pageY - 20) + "px");
+            }
+            function mouseout() {
+                div.transition()
+                .duration(300)
+                .style("opacity", 1e-6);
+            }
+
+            function displayChildren(d) {
+                //d.Objects;
+            }
+
+            return "done";
+
+
+        }
+
+        function selObjs(d) {
+            console.log('layerStalker://' + d.name);
+            window.location.replace('layerStalker://selobjs/' + btoa(d.name));
+        }
+
+        function setCurrent(d) {
+            console.log('layerStalker://' + d.name);
+            window.location.replace('layerStalker://setcurrent/' + btoa(d.name));
+        }
+
+        function hideUnselected(d) {
+            console.log('layerStalker://' + d.name);
+            window.location.replace('layerStalker://hideunselected/' + btoa(d.name));
+        }
+
+        function testUpdate() {
+            var layersTest = [
+                { id: "1", parent: "0", name: "l1" },
+                { id: "0", parent: "", name: "model" },
+                { id: "3", parent: "1", name: "l3" },
+                { id: "4", parent: "1", name: "l4" },
+                { id: "2", parent: "0", name: "l2" },
+                { id: "5", parent: "2", name: "l5" }];
+            var sLayers = JSON.stringify(layersTest);
+            updateLayers(sLayers);
+        }
+
+        contextMenu = function (menu, openCallback) {
+
+            // create the div element that will hold the context menu
+            d3.selectAll('.d3-context-menu').data([1])
+                .enter()
+                .append('div')
+                .attr('class', 'd3-context-menu');
+
+            // close menu
+            d3.select('body').on('click.d3-context-menu', function() {
+                d3.select('.d3-context-menu').style('display', 'none');
+            });
+
+            // this gets executed when a contextmenu event occurs
+            return function(data, index) {
+                var elm = this;
+
+                d3.selectAll('.d3-context-menu').html('');
+                var list = d3.selectAll('.d3-context-menu').append('ul');
+                list.selectAll('li').data(menu).enter()
+                    .append('li')
+                    .html(function(d) {
+                        return (typeof d.title === 'string') ? d.title : d.title(data);
+                    })
+                    .on('click', function(d, i) {
+                        d.action(elm, data, index);
+                        d3.select('.d3-context-menu').style('display', 'none');
+                    });
+
+                // the openCallback allows an action to fire before the menu is displayed
+                // an example usage would be closing a tooltip
+                if (openCallback) {
+                    if (openCallback(data, index) === false) {
+                        return;
+                    }
+                }
+
+                // display context menu
+                d3.select('.d3-context-menu')
+                    .style('left', (d3.event.pageX - 2) + 'px')
+                    .style('top', (d3.event.pageY - 2) + 'px')
+                    .style('display', 'block');
+
+                d3.event.preventDefault();
+                d3.event.stopPropagation();
+            };
+        };
+
+        function invertColor(hex) {
+            if (hex.indexOf('#') === 0) {
+                hex = hex.slice(1);
+            }
+            // convert 3-digit hex to 6-digits.
+            if (hex.length === 3) {
+                hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+            }
+
+            var r = parseInt(hex.slice(0, 2), 16),
+                g = parseInt(hex.slice(2, 4), 16),
+                b = parseInt(hex.slice(4, 6), 16);
+
+            var o = Math.round(((parseInt(r) * 299) +
+                                (parseInt(g) * 587) +
+                                (parseInt(b) * 114)) / 1000);
+
+            if (o > 125) { return 'black' } else { return 'white' };
+        }
+
+        function update(query) {
+            var text = d3.select("svg")
+                .selectAll('text')
+                .style("font-weight", function (d) {
+                    console.log(d.name)
+                    if (d.name.toLowerCase().indexOf(query.toLowerCase()) != -1) { return "bold" } else { return "normal" }
+                });
+        }
+
+
+
+    </script>
+
+</body>
+</html>
