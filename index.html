@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -20,27 +20,25 @@
 
     <div id="footer">
         <label for="search">search tag: </label>
-        <input type="text" id="searchbox" onkeyup="update(this.value)">
+        <input type="text" id="search" onkeyup="(new updateLayers(_json)).updateName(this.value)">
     </div>
 
     <script> 
+
         var init = function () {
             var data = [];
             var dataObjs = [];
+            
             
         }
         init();
         //sourced from https://bl.ocks.org/mbostock/4339083
 
-
-
-
-
-
+        var _json;
 
         function updateLayers(json) {
 
-
+            _json = json;
             data = JSON.parse(json);
             if (document.getElementById("dwg"))
                 d3.select("svg").remove();
@@ -94,6 +92,8 @@
             ];
 
             var diameter = 1200;
+
+
 
             var margin = { top: 20, right: 120, bottom: 20, left: 120 },
                 width = diameter,
@@ -307,6 +307,15 @@
                 update(d);
             }
 
+            this.updateName = function (query) {
+                var text = d3.select("svg")
+                    .selectAll('text')
+                    .style("font-weight", function (d) {
+                        console.log(d.name)
+                        if (d.name.toLowerCase().indexOf(query.toLowerCase()) != -1) { return "bold" } else { return "normal" }
+                    });
+            }
+
             // Hover on nodes!
             function mouseover(d) {
                 div.transition()
@@ -431,14 +440,7 @@
             if (o > 125) { return 'black' } else { return 'white' };
         }
 
-        function update(query) {
-            var text = d3.select("svg")
-                .selectAll('text')
-                .style("font-weight", function (d) {
-                    console.log(d.name)
-                    if (d.name.toLowerCase().indexOf(query.toLowerCase()) != -1) { return "bold" } else { return "normal" }
-                });
-        }
+
 
 
 
